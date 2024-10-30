@@ -1,0 +1,1291 @@
+Additional Text Snippets
+
+Here are various snippets of text that may provide additional context about the task/request. They might be document excerpts, message exchanges, etc. Note that these snippets may not be directly relevant to the task at hand. Only reference them if pertinent. Individual text snippets will be separated with a dashed line (`---`).
+
+<Text Snippets>
+CONTEXT: This is a pynput GitHub issue titled "Suppressing only hotkey events on Windows"
+
+Suppressing only hotkey events on Windows #170
+Closed
+wastedepository opened this issue on Jul 9, 2019 · 16 comments
+Comments
+@wastedepository
+wastedepository commented on Jul 9, 2019 •
+I'm on Windows. I want to use pynput to establish a hotkey (say, F1) while the foreground window is another program (say, Notepad). When the user presses F1, I do not want the foreground program to find out about that key press. But I want the Python script to be aware that F1 was pressed. If I press any other key, Notepad should receive the key as usual.
+
+There are multiple threads claiming this is possible using the pynput.keyboard.Listener.__init__() win32_event_filter argument, possibly in combination with pynput.keyboard.Listener.suppress_event():
+#163
+#70
+#47
+
+After messing with this for two hours, I have no idea how to make it work. How is win32_event_filter supposed to help suppress hotkeys for the foreground window, while still having those keys be processed by the Python program?
+
+The callback win32_event_filter sets up doesn't even have access to Listener.suppress_event(). Even if you use global variables to give it access, calling listener.suppress_event() from the win32_event_filter callback just causes the on_press and on_release callbacks to never be initiated.
+
+(I also failed to set up a subclass which inherits from Listener and overwrites the suppress property inherited from AbstractListener.)
+
+What is the correct way to do this? Maybe I am supposed to use only the win32_event_filter callback, and not use on_press or on_release at all?
+
+I include this skeleton program to show the situation:
+
+# TODO: This should not send F1 to the foreground window (Notepad), but should still print out "on press" for F1.
+
+from pynput import keyboard
+
+def on_press(key):
+    print('on press', key)
+
+def on_release(key):
+    print('on release', key)
+
+def win32_event_filter(msg, data):
+    print(msg, data)
+
+if __name__ == '__main__':
+    # Set up keyboard shortcuts.
+    with keyboard.Listener(on_press=on_press,
+                           on_release=on_release,
+                           win32_event_filter=win32_event_filter,
+                           suppress=False) as listener:
+        listener.join()
+@wastedepository wastedepository changed the title Suppressing certain keyboard events Suppressing certain keyboard events on Windows on Jul 9, 2019
+@wastedepository wastedepository changed the title Suppressing certain keyboard events on Windows Suppressing keyboard events on Windows on Jul 9, 2019
+@wastedepository wastedepository changed the title Suppressing keyboard events on Windows Suppressing only hotkey events on Windows on Jul 9, 2019
+@XanaDublaKublaConch
+XanaDublaKublaConch commented on Jul 13, 2019
+Same issue brought me here. The event filter runs before key up and key down and doesn't get passed a handle to the listener. I don't know what I'm supposed to do with this. The docs mention calling self.suppress_event() but there's no self. Suppressing from the filter blocks the key up/down. The filter also gets an event message and a virtual key/scan code, but my key up/down routines are using KeyCodes, so the comparisons are all off. I can't find a good way to convert between them. Kind of lost. I just want to make a global hotkey that doesn't get passed to the active window.
+
+@moses-palmer
+Owner
+moses-palmer commented on Jul 13, 2019
+The current API does not lend itself to global hotkeys-the workarounds mentioned in other thread have the potential to work, but require the end user to write platform specific code for each platform they want to support.
+
+The correct solution from the perspective of this library would be to add an API for global hotkeys, since those API's already exist for the supported platforms.
+
+Until that has been implemented, however, the only way to achieve this is using the event suppression functionality.
+
+You are correct in your observation that the data passed to the filter is incompatible with what the event callbacks receive, so you will have to modify your checks accordingly. There is really no way around this, as the filter ha to be called before the event is fully translated.
+
+You do not have to make the listener instance global, but you do need to name or in the same scope add the filter function.
+
+@XanaDublaKublaConch
+XanaDublaKublaConch commented on Jul 14, 2019
+Ok. Thanks for the update. I think I see how to make this work based on that info.
+
+@moses-palmer moses-palmer closed this as completed on Jul 24, 2019
+@lukakoczorowski
+lukakoczorowski commented on Mar 19, 2020
+Here's how I got around it
+
+def win32_event_filter(msg, data):
+   listener._suppress = False
+   # ...
+   if stop_propagation:
+      listener._suppress = True
+Might be a cleaner way, this works though
+
+@wastedepository
+Author
+wastedepository commented on Mar 21, 2020 •
+Could you clarify what you mean, by embedding your solution in the test code I originally posted? stop_propagation is not a known existing variable.
+
+Same test code (non-working):
+
+# TODO: This should not send F1 to the foreground window (Notepad), but should still print out "on press" for F1.
+
+from pynput import keyboard
+
+def on_press(key):
+    print('on press', key)
+
+def on_release(key):
+    print('on release', key)
+
+def win32_event_filter(msg, data):
+    print(msg, data)
+
+if __name__ == '__main__':
+    # Set up keyboard shortcuts.
+    with keyboard.Listener(on_press=on_press,
+                           on_release=on_release,
+                           win32_event_filter=win32_event_filter,
+                           suppress=False) as listener:
+        listener.join()
+@lukakoczorowski
+lukakoczorowski commented on Mar 23, 2020
+Apologies for the delay,
+
+from pynput import keyboard
+
+def keyboard_listener():
+	global listener
+	def on_press(key):
+		print('on press', key)
+
+	def on_release(key):
+		print('on release', key)
+		if key == keyboard.Key.esc:
+			return False # This will quit the listener
+
+	def win32_event_filter(msg, data):
+		if (msg == 257 or msg == 256) and data.vkCode == 112: # Key Down/Up & F1
+			print("Suppressing F1 up")
+			listener._suppress = True
+            # return False # if you return False, your on_press/on_release will not be called
+		else:
+	 		listener._suppress = False
+		return True
+
+	return keyboard.Listener(
+		on_press=on_press,
+		on_release=on_release,
+		win32_event_filter=win32_event_filter,
+		suppress=False
+	)
+
+listener = keyboard_listener()
+
+if __name__ == '__main__':
+	with listener as ml:
+		ml.join()
+@SpecialCharacter
+SpecialCharacter commented on Jul 28, 2020
+Dear lukakoczorowski, so you have an outer/global listener and an inner listener? I am trying to make sense of it... And the win32_event_filter comes between the on_press/release(key) and the inner listener and prevents any defined keys reaching the inner listener?
+
+@SpecialCharacter
+SpecialCharacter commented on Jul 28, 2020
+PS: I tried your code and it worked.
+Then I replaced the vkCode for F1 with RWin (= cmd_r) and it did not work. I tried 231 and 8c.
+Do you know which is the correct vkCode?
+
+@SpecialCharacter
+SpecialCharacter commented on Jul 28, 2020 •
+PPS: I went with a key that works, but now it says:
+AttributeError: module 'pynput.keyboard' has no attribute 'type'
+(I inserted some keyboard.type('abc').)
+
+@SpecialCharacter
+SpecialCharacter commented on Jul 30, 2020
+Finally I got it to work!
+
+from pynput import keyboard
+kbc = keyboard.Controller()
+Key = keyboard.Key
+...
+kbc.type('abc')
+
+@SpecialCharacter
+SpecialCharacter commented on Jul 30, 2020
+Still, RWin (= cmd_r) and print_screen will not work.
+
+@SpecialCharacter
+SpecialCharacter commented on Jul 30, 2020
+Is True/False the only result the win32_event_filter can export? Because I also want it to report a variable...
+
+@moses-palmer
+Owner
+moses-palmer commented on Jul 31, 2020
+The caller of the filter only responds to Boolean return values.
+
+What other value would you like to return? The callback acts as a simple filter, so I cannot think of any other reasonable class of values.
+
+@SpecialCharacter
+SpecialCharacter commented on Jul 31, 2020
+Thanks! It is possible to use several win32_event_filters (= linked to different variables)?
+
+@SpecialCharacter
+SpecialCharacter commented on Aug 1, 2020
+OK, found out it is possible to have more arguments linked to different variables in the filter.
+The only problem I have is when I press key B (variable b), I want key A to be reset, i.e. variable a deleted. Somehow this does not work yet.
+
+@SpecialCharacter
+SpecialCharacter commented on Aug 1, 2020
+Ah, had to tweak the code in the arguments. Now it works.
+
+---
+CONTEXT: This is from https://pynput.readthedocs.io/en/latest/faq.html#how-do-i-suppress-specific-events-only
+
+Frequently asked question
+How do I suppress specific events only?
+Passing the suppress=True flag to listeners will suppress all events system-wide. If this is not what you want, you will have to employ different solutions for different backends.
+
+If your backend of choice is not listed below, it does not support suppression of specific events.
+
+Windows
+For Windows, pass the argument named win32_event_filter to the listener constructor. This argument should be a callable taking the arguments (msg, data), where msg is the current message, and data associated data as a MSLLHOOKSTRUCT or a KBDLLHOOKSTRUCT, depending on whether you are creating a mouse or keyboard listener.
+
+If the filter function determines that the event should be suppressed, call suppress_event on the listener. If you return False, the event will be hidden from other listener callbacks.
+
+Here is a keyboard example:
+
+# Values for MSLLHOOKSTRUCT.vkCode can be found here:
+# https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+def win32_event_filter(msg, data):
+    if data.vkCode == 0x58:
+        # Suppress x
+        listener.suppress_event()
+
+---
+CONTEXT: This is from https://pynput.readthedocs.io/en/latest/limitations.html
+
+Windows
+On Windows, virtual events sent by other processes may not be received. This library takes precautions, however, to dispatch any virtual events generated to all currently running listeners of the current process.
+
+Furthermore, sending key press events will properly propagate to the rest of the system, but the operating system does not consider the buttons to be truly pressed. This means that key press events will not be continuously emitted as when holding down a physical key, and certain key sequences, such as shift pressed while pressing arrow keys, do not work as expected.
+---
+CONTEXT: This is from https://pynput.readthedocs.io/en/latest/keyboard.html
+
+Handling the keyboard
+The package pynput.keyboard contains classes for controlling and monitoring the keyboard.
+...
+Monitoring the keyboard
+Use pynput.keyboard.Listener like this:
+
+from pynput import keyboard
+
+def on_press(key):
+    try:
+        print('alphanumeric key {0} pressed'.format(
+            key.char))
+    except AttributeError:
+        print('special key {0} pressed'.format(
+            key))
+
+def on_release(key):
+    print('{0} released'.format(
+        key))
+    if key == keyboard.Key.esc:
+        # Stop listener
+        return False
+
+# Collect events until released
+with keyboard.Listener(
+        on_press=on_press,
+        on_release=on_release) as listener:
+    listener.join()
+
+# ...or, in a non-blocking fashion:
+listener = keyboard.Listener(
+    on_press=on_press,
+    on_release=on_release)
+listener.start()
+A keyboard listener is a threading.Thread, and all callbacks will be invoked from the thread.
+
+Call pynput.keyboard.Listener.stop from anywhere, raise StopException or return False from a callback to stop the listener.
+
+The key parameter passed to callbacks is a pynput.keyboard.Key, for special keys, a pynput.keyboard.KeyCode for normal alphanumeric keys, or just None for unknown keys.
+
+When using the non-blocking version above, the current thread will continue executing. This might be necessary when integrating with other GUI frameworks that incorporate a main-loop, but when run from a script, this will cause the program to terminate immediately.
+
+The keyboard listener thread
+The listener callbacks are invoked directly from an operating thread on some platforms, notably Windows.
+
+This means that long running procedures and blocking operations should not be invoked from the callback, as this risks freezing input for all processes.
+
+A possible workaround is to just dispatch incoming messages to a queue, and let a separate thread handle them.
+
+Handling keyboard listener errors
+If a callback handler raises an exception, the listener will be stopped. Since callbacks run in a dedicated thread, the exceptions will not automatically be reraised.
+
+To be notified about callback errors, call Thread.join on the listener instance:
+
+from pynput import keyboard
+
+class MyException(Exception): pass
+
+def on_press(key):
+    if key == keyboard.Key.esc:
+        raise MyException(key)
+
+# Collect events until released
+with keyboard.Listener(
+        on_press=on_press) as listener:
+    try:
+        listener.join()
+    except MyException as e:
+        print('{0} was pressed'.format(e.args[0]))
+Toggling event listening for the keyboard listener
+Once pynput.keyboard.Listener.stop has been called, the listener cannot be restarted, since listeners are instances of threading.Thread.
+
+If your application requires toggling listening events, you must either add an internal flag to ignore events when not required, or create a new listener when resuming listening.
+
+Synchronous event listening for the keyboard listener
+To simplify scripting, synchronous event listening is supported through the utility class pynput.keyboard.Events. This class supports reading single events in a non-blocking fashion, as well as iterating over all events.
+
+To read a single event, use the following code:
+
+from pynput import keyboard
+
+# The event listener will be running in this block
+with keyboard.Events() as events:
+    # Block at most one second
+    event = events.get(1.0)
+    if event is None:
+        print('You did not press a key within one second')
+    else:
+        print('Received event {}'.format(event))
+To iterate over keyboard events, use the following code:
+
+from pynput import keyboard
+
+# The event listener will be running in this block
+with keyboard.Events() as events:
+    for event in events:
+        if event.key == keyboard.Key.esc:
+            break
+        else:
+            print('Received event {}'.format(event))
+Please note that the iterator method does not support non-blocking operation, so it will wait for at least one keyboard event.
+
+The events will be instances of the inner classes found in pynput.keyboard.Events.
+
+Global hotkeys
+A common use case for keyboard monitors is reacting to global hotkeys. Since a listener does not maintain any state, hotkeys involving multiple keys must store this state somewhere.
+
+pynput provides the class pynput.keyboard.HotKey for this purpose. It contains two methods to update the state, designed to be easily interoperable with a keyboard listener: pynput.keyboard.HotKey.press and pynput.keyboard.HotKey.release which can be directly passed as listener callbacks.
+
+The intended usage is as follows:
+
+from pynput import keyboard
+
+def on_activate():
+    print('Global hotkey activated!')
+
+def for_canonical(f):
+    return lambda k: f(l.canonical(k))
+
+hotkey = keyboard.HotKey(
+    keyboard.HotKey.parse('<ctrl>+<alt>+h'),
+    on_activate)
+with keyboard.Listener(
+        on_press=for_canonical(hotkey.press),
+        on_release=for_canonical(hotkey.release)) as l:
+    l.join()
+This will create a hotkey, and then use a listener to update its state. Once all the specified keys are pressed simultaneously, on_activate will be invoked.
+
+Note that keys are passed through pynput.keyboard.Listener.canonical before being passed to the HotKey instance. This is to remove any modifier state from the key events, and to normalise modifiers with more than one physical button.
+
+The method pynput.keyboard.HotKey.parse is a convenience function to transform shortcut strings to key collections. Please see its documentation for more information.
+
+To register a number of global hotkeys, use the convenience class pynput.keyboard.GlobalHotKeys:
+
+from pynput import keyboard
+
+def on_activate_h():
+    print('<ctrl>+<alt>+h pressed')
+
+def on_activate_i():
+    print('<ctrl>+<alt>+i pressed')
+
+with keyboard.GlobalHotKeys({
+        '<ctrl>+<alt>+h': on_activate_h,
+        '<ctrl>+<alt>+i': on_activate_i}) as h:
+    h.join()
+Reference
+class pynput.keyboard.Controller[source]
+A controller for sending virtual keyboard events to the system.
+
+exception InvalidCharacterException[source]
+The exception raised when an invalid character is encountered in the string passed to Controller.type().
+
+Its first argument is the index of the character in the string, and the second the character.
+
+exception InvalidKeyException[source]
+The exception raised when an invalid key parameter is passed to either Controller.press() or Controller.release().
+
+Its first argument is the key parameter.
+
+alt_gr_pressed
+Whether altgr is pressed.
+
+Please note that this reflects only the internal state of this controller. See modifiers for more information.
+
+alt_pressed
+Whether any alt key is pressed.
+
+Please note that this reflects only the internal state of this controller. See modifiers for more information.
+
+ctrl_pressed
+Whether any ctrl key is pressed.
+
+Please note that this reflects only the internal state of this controller. See modifiers for more information.
+
+modifiers
+The currently pressed modifier keys.
+
+Please note that this reflects only the internal state of this controller, and not the state of the operating system keyboard buffer. This property cannot be used to determine whether a key is physically pressed.
+
+Only the generic modifiers will be set; when pressing either Key.shift_l, Key.shift_r or Key.shift, only Key.shift will be present.
+
+Use this property within a context block thus:
+
+with controller.modifiers as modifiers:
+    with_block()
+This ensures that the modifiers cannot be modified by another thread.
+
+press(key)[source]
+Presses a key.
+
+A key may be either a string of length 1, one of the Key members or a KeyCode.
+
+Strings will be transformed to KeyCode using KeyCode.char(). Members of Key will be translated to their value().
+
+Parameters:
+key – The key to press.
+
+Raises:
+InvalidKeyException – if the key is invalid
+ValueError – if key is a string, but its length is not 1
+pressed(*args)[source]
+Executes a block with some keys pressed.
+
+Parameters:	keys – The keys to keep pressed.
+release(key)[source]
+Releases a key.
+
+A key may be either a string of length 1, one of the Key members or a KeyCode.
+
+Strings will be transformed to KeyCode using KeyCode.char(). Members of Key will be translated to their value().
+
+Parameters:
+key – The key to release. If this is a string, it is passed to touches() and the returned releases are used.
+
+Raises:
+InvalidKeyException – if the key is invalid
+ValueError – if key is a string, but its length is not 1
+shift_pressed
+Whether any shift key is pressed, or caps lock is toggled.
+
+Please note that this reflects only the internal state of this controller. See modifiers for more information.
+
+tap(key)[source]
+Presses and releases a key.
+
+This is equivalent to the following code:
+
+controller.press(key)
+controller.release(key)
+Parameters:
+key – The key to press.
+
+Raises:
+InvalidKeyException – if the key is invalid
+ValueError – if key is a string, but its length is not 1
+touch(key, is_press)[source]
+Calls either press() or release() depending on the value of is_press.
+
+Parameters:
+key – The key to press or release.
+is_press (bool) – Whether to press the key.
+Raises:
+InvalidKeyException – if the key is invalid
+
+type(string)[source]
+Types a string.
+
+This method will send all key presses and releases necessary to type all characters in the string.
+
+Parameters:	string (str) – The string to type.
+Raises:	InvalidCharacterException – if an untypable character is encountered
+class pynput.keyboard.Listener(on_press=None, on_release=None, suppress=False, **kwargs)[source]
+A listener for keyboard events.
+
+Instances of this class can be used as context managers. This is equivalent to the following code:
+
+listener.start()
+try:
+    listener.wait()
+    with_statements()
+finally:
+    listener.stop()
+This class inherits from threading.Thread and supports all its methods. It will set daemon to True when created.
+
+Parameters:
+on_press (callable) –
+The callback to call when a button is pressed.
+
+It will be called with the argument (key), where key is a KeyCode, a Key or None if the key is unknown.
+
+on_release (callable) –
+The callback to call when a button is released.
+
+It will be called with the argument (key), where key is a KeyCode, a Key or None if the key is unknown.
+
+suppress (bool) – Whether to suppress events. Setting this to True will prevent the input events from being passed to the rest of the system.
+kwargs –
+Any non-standard platform dependent options. These should be prefixed with the platform name thus: darwin_, uinput_, xorg_ or win32_.
+
+Supported values are:
+
+darwin_intercept
+A callable taking the arguments (event_type, event), where event_type is Quartz.kCGEventKeyDown or Quartz.kCGEventKeyUp, and event is a CGEventRef.
+This callable can freely modify the event using functions like Quartz.CGEventSetIntegerValueField. If this callable does not return the event, the event is suppressed system wide.
+
+uinput_device_paths
+A list of device paths.
+If this is specified, pynput will limit the number of devices checked for the capabilities needed to those passed, otherwise all system devices will be used. Passing this might be required if an incorrect device is chosen.
+
+win32_event_filter
+A callable taking the arguments (msg, data), where msg is the current message, and data associated data as a KBDLLHOOKSTRUCT.
+If this callback returns False, the event will not be propagated to the listener callback.
+
+If self.suppress_event() is called, the event is suppressed system wide.
+
+__init__(on_press=None, on_release=None, suppress=False, **kwargs)[source]
+This constructor should always be called with keyword arguments. Arguments are:
+
+group should be None; reserved for future extension when a ThreadGroup class is implemented.
+
+target is the callable object to be invoked by the run() method. Defaults to None, meaning nothing is called.
+
+name is the thread name. By default, a unique name is constructed of the form “Thread-N” where N is a small decimal number.
+
+args is the argument tuple for the target invocation. Defaults to ().
+
+kwargs is a dictionary of keyword arguments for the target invocation. Defaults to {}.
+
+If a subclass overrides the constructor, it must make sure to invoke the base class constructor (Thread.__init__()) before doing anything else to the thread.
+
+running
+Whether the listener is currently running.
+
+start()
+Start the thread’s activity.
+
+It must be called at most once per thread object. It arranges for the object’s run() method to be invoked in a separate thread of control.
+
+This method will raise a RuntimeError if called more than once on the same thread object.
+
+stop()
+Stops listening for events.
+
+When this method returns, no more events will be delivered. Once this method has been called, the listener instance cannot be used any more, since a listener is a threading.Thread, and once stopped it cannot be restarted.
+
+To resume listening for event, a new listener must be created.
+
+wait()
+Waits for this listener to become ready.
+
+class pynput.keyboard.Key[source]
+A class representing various buttons that may not correspond to letters. This includes modifier keys and function keys.
+
+The actual values for these items differ between platforms. Some platforms may have additional buttons, but these are guaranteed to be present everywhere.
+
+alt = <0>
+A generic Alt key. This is a modifier.
+
+alt_gr = <0>
+The AltGr key. This is a modifier.
+
+alt_l = <0>
+The left Alt key. This is a modifier.
+
+alt_r = <0>
+The right Alt key. This is a modifier.
+
+backspace = <0>
+The Backspace key.
+
+caps_lock = <0>
+The CapsLock key.
+
+cmd = <0>
+A generic command button. On PC platforms, this corresponds to the Super key or Windows key, and on Mac it corresponds to the Command key. This may be a modifier.
+
+cmd_l = <0>
+The left command button. On PC platforms, this corresponds to the Super key or Windows key, and on Mac it corresponds to the Command key. This may be a modifier.
+
+cmd_r = <0>
+The right command button. On PC platforms, this corresponds to the Super key or Windows key, and on Mac it corresponds to the Command key. This may be a modifier.
+
+ctrl = <0>
+A generic Ctrl key. This is a modifier.
+
+ctrl_l = <0>
+The left Ctrl key. This is a modifier.
+
+ctrl_r = <0>
+The right Ctrl key. This is a modifier.
+
+delete = <0>
+The Delete key.
+
+down = <0>
+A down arrow key.
+
+end = <0>
+The End key.
+
+enter = <0>
+The Enter or Return key.
+
+esc = <0>
+The Esc key.
+
+f1 = <0>
+The function keys. F1 to F20 are defined.
+
+home = <0>
+The Home key.
+
+insert = <0>
+The Insert key. This may be undefined for some platforms.
+
+left = <0>
+A left arrow key.
+
+media_next = <0>
+The next track button.
+
+media_play_pause = <0>
+The play/pause toggle.
+
+media_previous = <0>
+The previous track button.
+
+media_volume_down = <0>
+The volume down button.
+
+media_volume_mute = <0>
+The volume mute button.
+
+media_volume_up = <0>
+The volume up button.
+
+menu = <0>
+The Menu key. This may be undefined for some platforms.
+
+num_lock = <0>
+The NumLock key. This may be undefined for some platforms.
+
+page_down = <0>
+The PageDown key.
+
+page_up = <0>
+The PageUp key.
+
+pause = <0>
+The Pause/Break key. This may be undefined for some platforms.
+
+print_screen = <0>
+The PrintScreen key. This may be undefined for some platforms.
+
+right = <0>
+A right arrow key.
+
+scroll_lock = <0>
+The ScrollLock key. This may be undefined for some platforms.
+
+shift = <0>
+A generic Shift key. This is a modifier.
+
+shift_l = <0>
+The left Shift key. This is a modifier.
+
+shift_r = <0>
+The right Shift key. This is a modifier.
+
+space = <0>
+The Space key.
+
+tab = <0>
+The Tab key.
+
+up = <0>
+An up arrow key.
+
+class pynput.keyboard.KeyCode(vk=None, char=None, is_dead=False, **kwargs)[source]
+A KeyCode represents the description of a key code used by the operating system.
+
+classmethod from_char(char, **kwargs)[source]
+Creates a key from a character.
+
+Parameters:	char (str) – The character.
+Returns:	a key code
+classmethod from_dead(char, **kwargs)[source]
+Creates a dead key.
+
+Parameters:	char – The dead key. This should be the unicode character representing the stand alone character, such as '~' for COMBINING TILDE.
+Returns:	a key code
+classmethod from_vk(vk, **kwargs)[source]
+Creates a key from a virtual key code.
+
+Parameters:
+vk – The virtual key code.
+kwargs – Any other parameters to pass.
+Returns:
+a key code
+
+join(key)[source]
+Applies this dead key to another key and returns the result.
+
+Joining a dead key with space (' ') or itself yields the non-dead version of this key, if one exists; for example, KeyCode.from_dead('~').join(KeyCode.from_char(' ')) equals KeyCode.from_char('~') and KeyCode.from_dead('~').join(KeyCode.from_dead('~')).
+
+Parameters:	key (KeyCode) – The key to join with this key.
+Returns:	a key code
+Raises:	ValueError – if the keys cannot be joined
+---
+CONTEXT: This is from Sep 20, 2022 https://stackoverflow.com/questions/72060632/suppress-hotkey-combinations-of-pynput
+
+The on_press, on_release, and win32_event_filter always return a single key in action so you need to check if both buttons are pressed and ignore that action. More detail can be found here. Here how I can suppressing that key combination:
+
+from pynput import keyboard
+from pynput.keyboard import Key
+import time
+
+altPressed = False
+
+def on_press(key):
+    global altPressed
+    altPressed = (key == Key.alt_l)
+    if key == keyboard.Key.esc:
+        keyboardListener.stop()
+
+def win32_event_filter(msg, data):
+    global altPressed
+    if data.vkCode == 115 and altPressed: # suppress f4 when alt_l pressed
+        print("suppressed f4")
+        keyboardListener.suppress_event()
+
+def on_release(key):
+    global altPressed
+    altPressed = (key == Key.alt_l)
+
+keyboardListener = keyboard.Listener(on_press=on_press,
+                                     win32_event_filter=win32_event_filter,
+                                     on_release=on_release)
+
+if __name__ == '__main__':
+    keyboardListener.start()
+    while(keyboardListener.is_alive()):
+        time.sleep(1)
+
+---
+CONTEXT: This is from https://github.com/moses-palmer/pynput/issues/20
+
+How to listen Key combination? #20
+Closed
+521xueweihan opened this issue on Mar 31, 2017 · 28 comments
+Comments
+@521xueweihan
+521xueweihan commented on Mar 31, 2017 •
+Great library!
+
+When I use the pynput I want to listen the key combination, Such as: ctrl+cmd
+
+I can't find the way to do that,So I ask you for help.👻
+
+@moses-palmer
+Owner
+moses-palmer commented on Mar 31, 2017
+Thank you!
+
+The listener does not maintain a list of the currently pressed keys---this would be a new, quite reasonable, feature.
+
+You can however emulate that using the following snippet:
+
+from pynput import keyboard
+
+# The key combination to check
+COMBINATION = {keyboard.Key.cmd, keyboard.Key.ctrl}
+
+# The currently active modifiers
+current = set()
+
+
+def on_press(key):
+    if key in COMBINATION:
+        current.add(key)
+        if all(k in current for k in COMBINATION):
+            print('All modifiers active!')
+    if key == keyboard.Key.esc:
+        listener.stop()
+
+
+def on_release(key):
+    try:
+        current.remove(key)
+    except KeyError:
+        pass
+
+
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
+This works as expected, with the following caveat: If one of the modifier keys is pressed before the listener is started, it has to be released and pressed again for the program to detect it.
+
+I will update the road map in the wiki.
+
+@moses-palmer moses-palmer closed this as completed on Mar 31, 2017
+@521xueweihan
+Author
+521xueweihan commented on Mar 31, 2017
+Thank you for your replay, I learn a lot 🙏
+
+@EEdLoh EEdLoh mentioned this issue on Jun 8, 2017
+Modifiers not being added to keyboard.Controller.modifiers making shfit_pressed, ctrl_pressed, etc. return false perpetually #33
+Closed
+@arcadeperfect
+arcadeperfect commented on Oct 26, 2017
+Hi,
+
+Thanks for the lib
+
+How can I combine your above example with a regular character to create a hotkey?
+
+IE shift+ctrl+alt+x causes some code to execute.
+
+Thanks
+
+@gaoyaoxin
+gaoyaoxin commented on Dec 2, 2017
+@arcadeperfect
+
+from pynput import keyboard
+
+# The key combination to check
+COMBINATION = {keyboard.Key.shift, keyboard.Key.ctrl, keyboard.Key.alt, keyboard.KeyCode.from_char('x')}
+
+# The currently active modifiers
+current = set()
+
+
+def on_press(key):
+    if key in COMBINATION:
+        current.add(key)
+        if all(k in current for k in COMBINATION):
+            print('All modifiers active!')
+    if key == keyboard.Key.esc:
+        listener.stop()
+
+
+def on_release(key):
+    try:
+        current.remove(key)
+    except KeyError:
+        pass
+
+
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
+keyboard.KeyCode.from_char('x') or its alike works fine for alphanumeric keys.
+Please note that the order of keys pressed is important. Beginning with alt and then x works fine while others may not.
+In my point of view, this might have something to with system-built-in shortcuts which often combines ctrl, alt and shift. However, without shift, ctrl+alt+x works fine in any order.
+Hope the designer (@moses-palmer) for this phenomenal package which can listen/monitor global keyboard events have some view on this!
+
+@devxpy
+devxpy commented on Apr 1, 2018
+@moses-palmer How are you able to modify the current varialbe from a function. AFAIK, it's not possible to modify global variable from inside a function in python without explicity declaring global in your function definition.
+
+https://stackoverflow.com/questions/4522786/modifying-a-global-variable-inside-a-function
+
+@moses-palmer
+Owner
+moses-palmer commented on Apr 1, 2018 via email
+You cannot assign to a global variable unless declaring it using global,
+since that would instead introduce it into the local scope, but you may
+freely mutate global variables.
+…
+@devxpy
+devxpy commented on Apr 1, 2018
+That explains it, thanks!
+
+Here is a modified version that also prints a message when you release that key combination!
+
+class MockButton:
+    def __init__(self, *keys):
+        self.combination = {*keys}
+        self.currently_pressed = set()
+        self.is_pressed = False
+
+        listener = Listener(on_press=self._on_press, on_release=self._on_release)
+        listener.start()
+
+    def _on_press(self, key):
+        if key in self.combination:
+            self.currently_pressed.add(key)
+
+        if self.currently_pressed == self.combination:
+            self.is_pressed = True
+            print('pressed!')
+
+    def _on_release(self, key):
+        try:
+            self.currently_pressed.remove(key)
+
+            if self.is_pressed and len(self.currently_pressed) == 0:
+                self.is_pressed = False
+                print('released!')
+
+        except KeyError:
+            pass
+
+
+if __name__ == '__main__':
+    btn = MockButton(Key.alt, Key.ctrl)
+    input()
+@GlassGruber
+GlassGruber commented on Aug 12, 2018
+Sorry to bump this up again, is just a question because maybe I'm misunderstanding something.
+I've used your code above for this type of hotkey combination ctrl + c.
+It wasn't working, so I fiddled a bit suspecting that maybe the key press wasn't fired properly, instead it was, but the key returned is not the one expected:
+
+In [1]: from pynput import keyboard
+
+In [2]: keyboard.Key.ctrl
+Out[2]: <Key.ctrl: <17>>
+
+In [3]: keyboard.Key.ctrl_l
+Out[3]: <Key.ctrl_l: <162>>
+keyboard.Key.ctrl is what I set in my script, but keyboard.Key.ctrl_l is instead what is caught by the listener; with this mismatch the condition to print the message is never met.
+Am I wrong assuming that Key.ctrl should be considered a general alternative for Key.ctrl_l or Key.ctrl_r?
+I'm on a Windows 7-64bit with Python 3.7
+
+Thank you!
+
+@moses-palmer
+Owner
+moses-palmer commented on Aug 13, 2018
+You are correct in assuming that Key.ctrl is supposed to be a generic alternative to Key.ctrl_l and Key.ctrl_r.
+
+In the case of comparisons, however, things do get a bit tricky, especially considering keycode_set_1 == keycode_set_2.
+
+I guess a possible solution is to add a set of alternate key codes for each KeyCode instance, and override __eq__ and __hash__. In the mean time, you can use key in (Key.ctrl, Key.ctrl_l, Key.ctrl_r) when doing comparisons. That would not work for the code in @devxpy 's comment though.
+
+@moses-palmer moses-palmer reopened this on Aug 13, 2018
+@GlassGruber
+GlassGruber commented on Aug 13, 2018 •
+In the mean time, you can use key in (Key.ctrl, Key.ctrl_l, Key.ctrl_r) when doing comparisons. That would not work for the code in @devxpy 's comment though.
+
+Thank you @moses-palmer, I thought so, this is the code I used if anyone needs this. As a small bonus the following code listens only to double pressing of ctrl + c in less than a second:
+
+from pynput import keyboard
+import datetime
+
+# The key combinations to check
+COMBINATIONS = [
+    {keyboard.Key.ctrl_l, keyboard.KeyCode(char='c')},
+    {keyboard.Key.ctrl_r, keyboard.KeyCode(char='c')}
+]
+
+# The currently active modifiers
+current = set()
+
+tnow = datetime.datetime.now()
+tcounter = 0
+
+def on_press(key):
+    if any([key in comb for comb in COMBINATIONS]):
+        current.add(key)
+        if any(all(k in current for k in comb) for comb in COMBINATIONS):
+            global tnow
+            global tcounter
+            tcounter += 1
+            if datetime.datetime.now() - tnow < datetime.timedelta(seconds=1):
+                if tcounter > 1:
+                    tcounter = 0
+                    main_function()
+            else:
+                tnow = datetime.datetime.now()
+    if key == keyboard.Key.esc:
+        listener.stop()
+
+
+def on_release(key):
+    try:
+        current.remove(key)
+    except KeyError:
+        pass
+
+def main_function():
+    print('Main function fired!')
+    # rest of your code here...
+
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
+If you have comments on above code to improve it or any suggestions (in particular the rather sloppy global declare, I'm still learning) please let me know!
+
+Thank you.
+
+@gabycperezdias
+gabycperezdias commented on Aug 22, 2018 •
+Hi @GlassGruber, I tried your code, but for some reason (I am on Windows) my "c" or "v" is like this only when pressed alone. When I have ctrl pressed, I get '\x16' '\x13' and don't match the combination.... @moses-palmer do you have any hint?
+
+@gabycperezdias
+gabycperezdias commented on Aug 23, 2018 •
+On a mac (changing the ctrl to cmd) I get the 'v' as '√'
+@moses-palmer Is it possible that this is an issue? Or, is there a way to get the correct combination?
+
+@gabycperezdias
+gabycperezdias commented on Sep 13, 2018 •
+Does anyone have any idea how to fix this? @521xueweihan? @devxpy? @moses-palmer? @GlassGruber?
+
+@moses-palmer
+Owner
+moses-palmer commented on Sep 13, 2018 •
+What version do you use? Commit 63aab1a, included in pynput 1.4, introduces a fix for keyboard layout handling, which is especially notable when running the application in a command window.
+
+I have tested the code in @GlassGruber's comment using the master branch, which correctly identified Ctrl + C, and with that commit reverted, which caused your issue with only a non-ASCII key being generated.
+
+Note that this on Windows; the Mac issue is different, and unresolved. Running the test script and printing all characters reveal that all alphanumeric keys are altered. Ctrl + C does work however; perhaps the simple and necessary solution is to add a special case for macOS? Using Cmd already mandates this.
+
+@gabycperezdias
+gabycperezdias commented on Sep 14, 2018 •
+@moses-palmer I've tried the pynput 1.4 and the master.
+
+I've used this: (I also changed 'c' for 'v' and ctrl for cmd on mac)
+
+    def on_press(key):
+        print('KEY', key)
+        try: print('CHAR', key.char) # letters, numbers et
+        except: print('NAME', keyboard.KeyCode().from_char(key.name))
+On Mac High Sierra - sequence: cmd / v / cmd+v
+Both gave me:
+KEY Key.cmd
+NAME 'cmd'
+KEY 'v'
+CHAR v
+vKEY Key.cmd
+NAME 'cmd'
+KEY '√'
+CHAR √
+mainFunction was never fired. (If I changed the code to combine with ctrl instead of cmd, the main function is fired when 'v' is pressed 3 times after ctrl pressed (and not released) and 'v' is shown correctly)
+
+Windows 10 and Ubuntu 18 - sequence: ctrl / v / ctrl+v
+KEY Key.ctrl_l
+NAME 'ctrl_l'
+KEY 'v'
+CHAR v
+KEY Key.ctrl_l
+NAME 'ctrl_l'
+KEY 'v'
+CHAR v
+Main function is only fired if ctrl key is pressed and 'v' is typed twice. but the char is shown correctly
+
+@beterhans
+beterhans commented on Oct 8, 2018
+Hi GlassGruber Thanks
+
+I edited your code so I can use in my script
+
+basiclly I need to break a while loop. with ctrl - q
+but the code demo is in a loop I can't run two loop in my script.
+Luckliy I figure out to use start instead of join.
+and ctrl shift keys are different on windows and mac
+So I changed a bit to match all system.
+
+Here is it
+
+import pynput,time
+
+is_quit = False
+
+KeyComb_Quit = [
+    {pynput.keyboard.Key.ctrl, pynput.keyboard.KeyCode(char='q')},
+    {pynput.keyboard.Key.ctrl_l, pynput.keyboard.KeyCode(char='q')},
+    {pynput.keyboard.Key.ctrl_r, pynput.keyboard.KeyCode(char='q')}
+
+]
+
+def on_press(key):
+    global is_quit
+    if any([key in comb for comb in KeyComb_Quit]):
+        current.add(key)
+        if any(all(k in current for k in comb) for comb in KeyComb_Quit):
+            is_quit = True
+
+def on_release(key):
+    try:
+        current.remove(key)
+    except KeyError:
+        pass
+
+
+# The currently active modifiers
+current = set()
+
+listener = pynput.keyboard.Listener(on_press=on_press, on_release=on_release)
+listener.start()
+
+##### MAIN Script #####
+while True:
+    do something
+    time.sleep(0.00833)
+    if is_quit:
+        break
+@SpecialCharacter
+SpecialCharacter commented on Mar 17, 2019
+Sorry, I don't get it how to use join(key) correctly.
+I have the listener output "´s". How do I turn it into "ś"?
+
+@redstoneleo
+redstoneleo commented on May 30, 2019
+Any progress on implement the key combination feature for this project ?
+
+@GarrettStrahan
+GarrettStrahan commented on Jun 23, 2019 •
+So I wrote some code & its causing me a headache. I want to have two different combinations. The code I wrote the first combination of keys Ctrl+G or g work but Ctrl + H or h did not but crashes the program. I have re-written my code so many times trying to figure it out that it does not makes sense. Any help? Please help me! I'm really new to python!
+
+Indentation is not working, but if you look at the .txt it is there.
+
+2_types_of_hotkeys.txt
+
+from pynput import keyboard
+
+COMBINATIONS = [
+(keyboard.Key.ctrl_l, keyboard.KeyCode(char='g')),
+(keyboard.Key.ctrl_l, keyboard.KeyCode(char='G'))]
+
+COMBINATIONS2 = [
+(keyboard.Key.ctrl, keyboard.KeyCode(char='h')),
+(keyboard.Key.ctrl, keyboard.KeyCode(char='H'))]
+#Not working just yet
+current = set()
+
+def execute1(): #Function call for character Ctrl G or Ctrl g
+print("Detected hotkey")
+
+def execute2(): #Function call for character Ctrl H or Ctrl h
+print("Detected 2nd hotkey")
+
+def on_press(key):
+if any([key in COMBO for COMBO in COMBINATIONS]):
+current.add(key)
+if any(all(k in current for k in COMBO) for COMBO in COMBINATIONS):
+execute1()
+if any(all(k in current for k in COMBO) for COMBO in COMBINATIONS2):
+execute2()
+
+def on_release(key):
+if any([key in COMBO for COMBO in COMBINATIONS]):
+current.remove(key)
+if any([key in COMBO for COMBO in COMBINATIONS2]):
+current.remove(key)
+
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+listener.join()
+
+@platelminto
+platelminto commented on Sep 11, 2019 •
+Using the given snippet, dead keys pollute the list and make further comparisons break. For example, when typing in Shift+t, a 'Shift' will be added, then a 'T'. If you then release the Shift, you are left with a 'T', and releasing 't' does not remove it, and the set now will keep containing 'T'.
+
+Is there a way to disable registering dead keys?
+
+As a current solution, I remove the last element in the list when a key is released, ignoring which key it actually is.
+
+@segalion
+segalion commented on Nov 20, 2019
+See
+#182 (comment)
+
+@moses-palmer
+Owner
+moses-palmer commented on Nov 29, 2019
+@platelminto, if you run into issues with dead keys, you may want to take a look at #118. The branch fixup-win32-keyboard-listener has a proposed solution.
+
+@moses-palmer moses-palmer closed this as completed on Dec 4, 2019
+@pagujeeva
+pagujeeva commented on Jan 7, 2020
+How do we capture the windows super key events like (windows+r or windows+m etc)
+
+@SpecialCharacter
+SpecialCharacter commented on Jul 19, 2020
+Can you give an example?
+
+@yemreak
+Contributor
+yemreak commented on Jul 19, 2020
+Sorry about my last sentence, It's happened due to misunderstanding so I deleted it
+
+@SpecialCharacter
+SpecialCharacter commented on Sep 26, 2020 •
+@platelminto Had the same problem. I solved it by tracking the shift key down / shift key up movements.
+It works also for windows super key events.
+
+@a2435191
+a2435191 commented on Sep 28, 2020
+from pynput import keyboard
+from pynput.keyboard import Key
+from threading import Thread
+import time
+
+COMBINATION = {
+    Key.down,
+    Key.up,
+    Key.left
+    #Key.right
+}
+
+
+
+# The key combination to check
+
+
+# The currently active modifiers
+current = set()
+
+
+def on_press(key):
+    if key in COMBINATION:
+        current.add(key)
+        if all(k in current for k in COMBINATION):
+            print('All modifiers active!')
+    if key == keyboard.Key.esc:
+        listener.stop()
+
+
+def on_release(key):
+    try:
+        current.remove(key)
+    except KeyError:
+        pass
+
+
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
+I was looking for a way to detect multiple keypresses at once, and this seemed to be the answer. The only problem is that, for whatever reason, only two keys can be returned at the same time (with occasional exception). How do I detect 3+ keyboard inputs at once?
+
+@luizoti
+luizoti commented on Mar 22, 2022
+from pynput import keyboard
+from pynput.keyboard import Key
+from threading import Thread
+import time
+
+COMBINATION = {
+    Key.down,
+    Key.up,
+    Key.left
+    #Key.right
+}
+
+
+
+# The key combination to check
+
+
+# The currently active modifiers
+current = set()
+
+
+def on_press(key):
+    if key in COMBINATION:
+        current.add(key)
+        if all(k in current for k in COMBINATION):
+            print('All modifiers active!')
+    if key == keyboard.Key.esc:
+        listener.stop()
+
+
+def on_release(key):
+    try:
+        current.remove(key)
+    except KeyError:
+        pass
+
+
+with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    listener.join()
+I was looking for a way to detect multiple keypresses at once, and this seemed to be the answer. The only problem is that, for whatever reason, only two keys can be returned at the same time (with occasional exception). How do I detect 3+ keyboard inputs at once?
+
+It seems that pyinput can't handle three or more events at the same time, and where it always replaces the second key with the third. From the looks of it it does this without calling the on_release event.
+</Text Snippets>
