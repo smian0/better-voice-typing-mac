@@ -7,8 +7,10 @@ from modules.transcribe import transcribe_audio
 from modules.clean_text import clean_transcription
 from modules.tray import setup_tray_icon
 from modules.settings import Settings
+from modules.history import TranscriptionHistory
 import sys
 import os
+import traceback
 
 class VoiceTypingApp:
     def __init__(self):
@@ -21,13 +23,15 @@ class VoiceTypingApp:
         # Initialize settings
         self.settings = Settings()
 
-        # Initialize components
-        self.recorder = AudioRecorder()
         self.ui_feedback = UIFeedback()
+        self.recorder = AudioRecorder(level_callback=self.ui_feedback.update_audio_level)
         self.ui_feedback.set_click_callback(self.cancel_recording)
         self.recording = False
         self.ctrl_pressed = False
         self.clean_transcription_enabled = self.settings.get('clean_transcription')
+
+        # Add history manager
+        self.history = TranscriptionHistory()
 
         def win32_event_filter(msg, data):
             # Key codes and messages
@@ -93,9 +97,12 @@ class VoiceTypingApp:
             text = transcribe_audio(self.recorder.filename)
             if self.clean_transcription_enabled:
                 text = clean_transcription(text)
+            self.history.add(text)  # Add to history
             self.ui_feedback.insert_text(text)
+            self.update_icon_menu()  # Update the tray icon menu
         except Exception as e:
-            print(f"Error in _process_audio_thread: {str(e)}")
+            print("Error in _process_audio_thread:")
+            traceback.print_exc()  # This will print the full traceback
             self.ui_feedback.insert_text(f"Error: {str(e)[:50]}...")
 
     def toggle_clean_transcription(self):
