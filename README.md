@@ -53,5 +53,7 @@ The app works as follows:
 
 ## TODO
 - Improve transcription accuracy, especially for code variables, proper nouns and abbreviations by using screenshot provided to Claude Haiku for corrections.
+- Sometimes transcription, this can be incredibly frustrating on longer recordings. Add a way to manually reprocess failed transcriptions, like via a tray icon option.
+
 - ~~Select mic via taskbar icon (see https://github.com/bsnjoy/voice-typing/blob/main/select_mic.py)~~
 - More advanced clipboard handling (see https://github.com/mrichar1/clipster)

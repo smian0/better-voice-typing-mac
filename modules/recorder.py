@@ -22,6 +22,9 @@ class AudioRecorder:
         self.thread = None
         self.level_callback = level_callback
         self.smoothed_level = 0.0
+        self.stream = None
+        self.file = None
+        self._lock = threading.Lock()  # Add thread lock
 
     def _calculate_level(self, indata):
         """Calculate audio level from input data"""
@@ -39,17 +42,34 @@ class AudioRecorder:
 
     def _record(self):
         def audio_callback(indata, frames, time, status):
-            if self.level_callback:
-                level = self._calculate_level(indata)
-                self.level_callback(level)
-            file.write(indata.copy())
+            with self._lock:
+                if not self.recording or self.file is None:
+                    return
 
-        with sf.SoundFile(self.filename, mode='w', samplerate=22050,
-                         channels=1, subtype='PCM_16', format='WAV') as file:
-            with sd.InputStream(samplerate=22050, channels=1,
-                              callback=audio_callback):
+                if self.level_callback:
+                    level = self._calculate_level(indata)
+                    self.level_callback(level)
+                try:
+                    self.file.write(indata.copy())
+                except Exception as e:
+                    print(f"Audio callback error: {e}")
+
+        try:
+            self.file = sf.SoundFile(self.filename, mode='w', samplerate=22050,
+                                   channels=1, subtype='PCM_16', format='WAV')
+            self.stream = sd.InputStream(samplerate=22050, channels=1,
+                                       callback=audio_callback)
+            with self.file, self.stream:
                 while self.recording:
                     sd.sleep(100)
+        finally:
+            with self._lock:
+                if self.stream is not None:
+                    self.stream.close()
+                    self.stream = None
+                if self.file is not None:
+                    self.file.close()
+                    self.file = None
 
     def start(self):
         self.recording = True
@@ -57,6 +77,26 @@ class AudioRecorder:
         self.thread.start()
 
     def stop(self):
-        self.recording = False
+        """Stop recording with timeout to prevent hanging"""
+        with self._lock:
+            self.recording = False
+
         if self.thread:
-            self.thread.join()
+            # Add timeout to thread.join() to prevent hanging
+            self.thread.join(timeout=2.0)
+            if self.thread.is_alive():
+                print("Warning: Recording thread did not stop cleanly")
+                # Force cleanup
+                with self._lock:
+                    if self.stream is not None:
+                        try:
+                            self.stream.close()
+                        except:
+                            pass
+                        self.stream = None
+                    if self.file is not None:
+                        try:
+                            self.file.close()
+                        except:
+                            pass
+                        self.file = None

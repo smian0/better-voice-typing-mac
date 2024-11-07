@@ -135,9 +135,17 @@ class VoiceTypingApp:
         if self.recording:
             print("Canceling recording...")
             self.recording = False
-            self.recorder.stop()
+            # Start a separate thread for stopping the recorder
+            threading.Thread(target=self._stop_recorder).start()
             self.ui_feedback.stop_listening_animation()
-            # Note: We don't call process_audio() here
+
+    def _stop_recorder(self):
+        """Helper method to stop recorder in a separate thread"""
+        try:
+            self.recorder.stop()
+        except Exception as e:
+            print(f"Error stopping recorder: {e}")
+            traceback.print_exc()
 
 if __name__ == "__main__":
     app = VoiceTypingApp()

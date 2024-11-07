@@ -25,7 +25,7 @@ class UIFeedback:
         self.frame.pack(expand=True, fill='both', padx=2, pady=2)
 
         # Create label with click binding
-        self.label = tk.Label(self.frame, text="🎤 Recording",
+        self.label = tk.Label(self.frame, text="🎤 Recording (click to cancel)",
                             fg='white', bg='red', padx=10, pady=5,
                             cursor="hand2")  # Change cursor to hand on hover
         self.label.pack()
