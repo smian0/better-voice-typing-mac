@@ -1,33 +1,56 @@
-I want to build a light weight Python windows desktop app for myself as an alternative to Windows Voice Typing (activated by Win H)
+# Voice Typing Assistant
+
+A lightweight Python Windows desktop app alternative to Windows Voice Typing (Win+H).
 
 ## Overview
 
-It would work like this:
-- user presses keyboard shortcut to begin recording the users voice
-- there is no UI, but where the user had the cursor a "listening..." is temporarily entered with the dots edited to show active listening, eg. "." then "..", "...", "..", "."
-- the listening will continue until the user presses the keyboard shortcut again to stop the recording and send it for processing
-- the audio is sent to OpenAi Whisper, then the text is processed by Anthropic Claude Haiku to clean it up, before being inserted at the current cursor location
-- the user can change some settings and options via the taskbar icon
+The app works as follows:
+- Press Caps Lock to begin recording your voice (without activating Caps Lock)
+- A small red indicator appears in the top-right corner showing "🎤 Recording"
+- Press Caps Lock again to stop recording and process the audio
+- The audio is sent to OpenAI Whisper for transcription
+- The transcribed text is cleaned (if enabled) and inserted at the cursor location
+- Settings can be accessed via the system tray icon
 
-## Detailed Requirements
+## Features
 
-Keyboard Shortcut Activation
-Start Recording: Press a predefined shortcut to begin voice capture.
-Stop Recording: Press the same shortcut to end recording and initiate processing.
+### Keyboard Controls
+- **Toggle Recording**: Caps Lock (normal Caps Lock functionality still available with Ctrl+Caps Lock)
+- **Cancel Recording**: Click the recording indicator
 
-Minimal UI Feedback
-In-line Indicator: Insert "listening..." at the current cursor location.
-Animation: Update the dots (e.g., ".", "..", "...") to show active listening.
-Cleanup: Remove or replace the indicator with transcribed text after processing.
+### UI Feedback
+- Minimal floating indicator in top-right corner
+- Pulsing red animation during recording
+- Clickable to cancel recording
 
-Voice Recording
-(default) Continuous Capture: Record audio until the user stops it, send it all at once to OpenAi Whisper and then Anthropic Claude Haiku for cleaning up
-(alternative, later) Smart Capture: Record audio in 1-2 minute chunks (looking for ~1 second of silence to trigger the chunk) send each chunk to OpenAi Whisper in the background and collect the results, then send the whole lot to Anthropic Claude Haiku for cleaning up
-Format Compatibility: Save audio in .mp4 format, which is compatible with OpenAi Whisper
+### System Tray
+- Accessible settings menu
+- Clean transcription toggle
+- Easy exit option
 
-Speech Recognition Processing
-Error Handling: Manage failures gracefully and inform the user, likely by inserting the (shortned) error message into the text.
+### Settings
+- Clean Transcription: Enable/disable text cleanup
+- Continuous Capture (planned feature): Record audio until the user stops it, send it all at once to OpenAi Whisper and then Anthropic Claude Haiku for cleaning up
+- Smart Capture (planned feature): Record audio in 1-2 minute chunks (looking for ~1 second of silence to trigger the chunk) send each chunk to OpenAi Whisper in the background and collect the results, then send the whole lot to Anthropic Claude Haiku for cleaning up
 
-Settings and Options
-For now, just choice of Continuous Capture mode, Smart Capture mode and exit
-Have icon change to one that indicates recording
+## Technical Details
+- Built with Python using tkinter for UI
+- Uses pynput for keyboard handling
+- OpenAI Whisper API for transcription
+- Supports Windows OS
+
+## Dependencies
+- python-dotenv: Environment variables
+- pynput: Keyboard shortcuts
+- sounddevice & soundfile: Audio recording
+- openai: Whisper API integration
+- anthropic: Text cleanup (planned)
+- pyautogui: Text insertion
+- pystray: System tray functionality
+- Pillow: Icon handling
+
+## TODO
+- Select mic via taskbar icon (see https://github.com/bsnjoy/voice-typing/blob/main/select_mic.py)
+- Restore clipboard after text insertion (see https://github.com/bsnjoy/voice-typing/blob/654698d262c52d11c7f5e18f739483ed2cea6838/voice_typing.py#L151)
+- Implement Smart Capture mode
+- Implement Continuous Capture mode

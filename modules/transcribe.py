@@ -1,6 +1,12 @@
 from openai import OpenAI
 
-client = OpenAI()  # This will use OPENAI_API_KEY from environment by default
+client = OpenAI()
+
+
+# OpenAI Speech to text docs: https://platform.openai.com/docs/guides/speech-to-text
+# ⚠️ IMPORTANT: OpenAI Audio API file uploads are currently limited to 25 MB
+
+
 
 def transcribe_audio(filename):
     with open(filename, 'rb') as audio_file:
@@ -8,4 +14,4 @@ def transcribe_audio(filename):
             model="whisper-1",
             file=audio_file
         )
-    return response.text 
+    return response.text
