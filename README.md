@@ -1,6 +1,8 @@
 # Voice Typing Assistant
 
-A lightweight Python Windows desktop app alternative to Windows Voice Typing (Win+H).
+A lightweight Python desktop app for Windows that improves upon Windows Voice Typing (Win+H) by offering superior transcription accuracy while maintaining a simple, intuitive interface.
+
+![Voice Typing Demo](voice-typing-demo.gif)
 
 ## Overview
 
@@ -10,50 +12,59 @@ The app works as follows:
 - Audio level visualization shows your current input volume
 - Press Caps Lock again to stop recording and process the audio
 - The audio is sent to OpenAI Whisper for transcription
-- The transcribed text is cleaned (if enabled) and inserted at the cursor location
+- (beta, optional) The transcribed text is cleaned and inserted at the cursor location
+- The transcribed text is automatically inserted at your current cursor position in any text field or editor
 - Settings and recent transcriptions can be accessed via the system tray icon
 
 ## Features
 
-### Keyboard Controls
+### Controls
 - **Toggle Recording**: Caps Lock (normal Caps Lock functionality still available with Ctrl+Caps Lock)
 - **Cancel Recording**: Click the recording indicator
 
-### UI Feedback
-- Minimal floating indicator in top-right corner
-- Pulsing red animation during recording
-- Real-time audio level visualization
-- Clickable to cancel recording
+### Tray Options/Settings
+- Recent Transcriptions: Access previous transcriptions, copy to clipboard
+- Continuous Capture: Default recording mode. Record audio until the user stops it, send it all at once to OpenAI Whisper
+- (beta) Clean Transcription: Enable/disable text cleaning using Anthropic Claude Haiku
 
-### Tray Settings
-- Clean Transcription: Enable/disable text cleanup
-- Continuous Capture: Record audio until the user stops it, send it all at once to OpenAi Whisper
-- Smart Capture (planned feature): Record audio in 1-2 minute chunks (looking for ~1 second of silence to trigger the chunk) send each chunk to OpenAi Whisper in the background and collect the results, then send the whole lot to Anthropic Claude Haiku for cleaning up
 
 ### Tray History
 - Keeps track of recent transcriptions
+- Useful if your cursor was in the wrong place at the time of insertion
 - Quick access to copy previous transcriptions from system tray
-- Preserves clipboard content when inserting text
 
 ## Technical Details
 - Built with Python using tkinter for UI
-- Uses pynput for keyboard handling
 - OpenAI Whisper API for transcription
-- Supports Windows OS
+- Only tested on Windows OS and >Python 3.8
 
-## Dependencies
-- python-dotenv: Environment variables
-- pynput: Keyboard shortcuts
-- sounddevice & soundfile: Audio recording
-- openai: Whisper API integration
-- anthropic: Text cleanup (planned)
-- pyautogui: Text insertion
-- pystray: System tray functionality
-- Pillow: Icon handling
+## Current Limitations
+- Maximum recording duration of ~10 minutes per transcription due to OpenAI Whisper API's 25MB file size limit
+- Currently uses system default microphone with no in-app selection option
+
+## Setup/Installation
+
+1. Clone the repository
+2. Create a virtual environment using `python -m venv venv`
+3. Run `pip install -r requirements.txt` to install all dependencies
+4. Create a `.env` file based on `.env.example` by running `cp .env.example .env`
+5. Set up your API keys:
+   - Get an OpenAI API key from [OpenAI's API Keys page](https://platform.openai.com/api-keys)
+   - (Optional) Get an Anthropic API key if you want to use the text cleaning feature
+   - Add these keys to your `.env` file
+6. Run the app by double-clicking `voice_typing.pyw`, or add it to your Windows startup folder to launch automatically on system boot
 
 ## TODO
-- Improve transcription accuracy, especially for code variables, proper nouns and abbreviations by using screenshot provided to Claude Haiku for corrections.
-- Sometimes transcription, this can be incredibly frustrating on longer recordings. Add a way to manually reprocess failed transcriptions, like via a tray icon option.
+- [ ] Customizable activation shortcuts for recording control
+- [ ] Improved transcription accuracy for code variables, proper nouns and abbreviations using screenshot context and cursor position via VLM
+- [ ] Manual retry option for failed transcriptions via tray menu (especially important for longer recordings)
+- [ ] Smart Capture: Record audio in 1-2 minute chunks with silence detection, process chunks with Whisper in background, then combine and clean results with an LLM
+- [ ] Add microphone selection via system tray menu (currently locked to system default)
 
-- ~~Select mic via taskbar icon (see https://github.com/bsnjoy/voice-typing/blob/main/select_mic.py)~~
-- More advanced clipboard handling (see https://github.com/mrichar1/clipster)
+## Contributing
+
+TBD, for now, just create a pull request and start a conversation.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

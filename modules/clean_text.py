@@ -1,6 +1,6 @@
 from .completion import get_anthropic_completion
 
-def clean_transcription(text):
+def clean_transcription(text: str) -> str:
     """
     Cleans and corrects voice-to-text transcription using Anthropic's Claude model.
     """

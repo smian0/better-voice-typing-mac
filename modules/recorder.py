@@ -1,7 +1,9 @@
+import threading
+from typing import Optional, Callable
+
+import numpy as np
 import sounddevice as sd
 import soundfile as sf
-import threading
-import numpy as np
 
 # NOTE: Optimized settings for speech recording
 # - 16kHz sample rate is optimal for STT, using 22.05kHz for safety margin
@@ -16,17 +18,17 @@ class AudioRecorder:
     # 0.2 provides a good balance between smoothness and responsiveness
     SMOOTHING_FACTOR = 0.2
 
-    def __init__(self, filename='temp_audio.wav', level_callback=None):
+    def __init__(self, filename: str = 'temp_audio.wav', level_callback: Optional[Callable[[float], None]] = None) -> None:
         self.filename = filename
         self.recording = False
-        self.thread = None
+        self.thread: Optional[threading.Thread] = None
         self.level_callback = level_callback
-        self.smoothed_level = 0.0
-        self.stream = None
-        self.file = None
-        self._lock = threading.Lock()  # Add thread lock
+        self.smoothed_level: float = 0.0
+        self.stream: Optional[sd.InputStream] = None
+        self.file: Optional[sf.SoundFile] = None
+        self._lock: threading.Lock = threading.Lock()
 
-    def _calculate_level(self, indata):
+    def _calculate_level(self, indata: np.ndarray) -> float:
         """Calculate audio level from input data"""
         # Get the RMS value from the audio data
         rms = np.sqrt(np.mean(np.square(indata)))
@@ -40,8 +42,11 @@ class AudioRecorder:
         self.smoothed_level = (self.SMOOTHING_FACTOR * current_level) + ((1 - self.SMOOTHING_FACTOR) * self.smoothed_level)
         return self.smoothed_level
 
-    def _record(self):
-        def audio_callback(indata, frames, time, status):
+    def _record(self) -> None:
+        def audio_callback(indata: np.ndarray,
+                         frames: int,
+                         time: float,
+                         status: int) -> None:
             with self._lock:
                 if not self.recording or self.file is None:
                     return
@@ -71,12 +76,12 @@ class AudioRecorder:
                     self.file.close()
                     self.file = None
 
-    def start(self):
+    def start(self) -> None:
         self.recording = True
         self.thread = threading.Thread(target=self._record)
         self.thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop recording with timeout to prevent hanging"""
         with self._lock:
             self.recording = False

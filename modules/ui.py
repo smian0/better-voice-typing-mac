@@ -1,9 +1,10 @@
-import tkinter as tk
 import threading
+import tkinter as tk
+from typing import Optional, Callable, Any
+
 from pynput import keyboard
-import pyperclip
 import pyautogui
-import time
+import pyperclip
 
 class UIFeedback:
     pyautogui_lock = threading.Lock()
@@ -11,7 +12,7 @@ class UIFeedback:
     def __init__(self):
         # Create the floating window
         self.root = tk.Tk()
-        self.root.withdraw()  # Hide initially
+        self.root.withdraw()  # Hide initially?
         self.indicator = tk.Toplevel(self.root)
         self.indicator.withdraw()
 
@@ -54,14 +55,14 @@ class UIFeedback:
         screen_width = self.root.winfo_screenwidth()
         self.indicator.geometry(f'+{screen_width-150}+10')
 
-    def update_audio_level(self, level):
+    def update_audio_level(self, level: float) -> None:
         """Update the audio level indicator (level should be between 0.0 and 1.0)"""
         if self.pulsing:  # Only update when recording
             width = self.level_canvas.winfo_width()
             bar_width = int(width * min(1.0, max(0.0, level)))
             self.level_canvas.coords(self.level_bar, 0, 0, bar_width, 4)
 
-    def _pulse(self):
+    def _pulse(self) -> None:
         if self.pulsing:
             self.current_color = (self.current_color + 1) % 2
             color = self.pulse_colors[self.current_color]
@@ -70,12 +71,12 @@ class UIFeedback:
             self.label.configure(bg=color)
             self.indicator.after(500, self._pulse)  # Pulse every 500ms
 
-    def start_listening_animation(self):
+    def start_listening_animation(self) -> None:
         self.indicator.deiconify()
         self.pulsing = True
         self._pulse()
 
-    def stop_listening_animation(self):
+    def stop_listening_animation(self) -> None:
         self.pulsing = False
         self.indicator.withdraw()
         # Reset colors
@@ -86,15 +87,15 @@ class UIFeedback:
         # Reset audio level
         self.level_canvas.coords(self.level_bar, 0, 0, 0, 4)
 
-    def _handle_click(self, event):
+    def _handle_click(self, event: tk.Event) -> None:
         if self.on_click_callback:
             self.on_click_callback()
 
-    def set_click_callback(self, callback):
+    def set_click_callback(self, callback: Callable[[], None]) -> None:
         """Set the function to be called when the indicator is clicked"""
         self.on_click_callback = callback
 
-    def insert_text(self, text):
+    def insert_text(self, text: str) -> None:
         """Insert text at the current cursor position using clipboard while preserving original clipboard content"""
         try:
             with self.pyautogui_lock:
@@ -115,7 +116,7 @@ if __name__ == "__main__":
     import time
 
     class UITester:
-        def __init__(self):
+        def __init__(self) -> None:
             print("Starting UI feedback test...")
             print("Press Caps Lock to toggle recording indicator")
             print("Press Ctrl+C to exit")
@@ -124,7 +125,7 @@ if __name__ == "__main__":
             self.recording = False
             self.listener = None
 
-        def on_press(self, key):
+        def on_press(self, key: keyboard.Key) -> None:
             if key == keyboard.Key.caps_lock:
                 self.recording = not self.recording
                 if self.recording:
@@ -134,7 +135,7 @@ if __name__ == "__main__":
                     print("Recording stopped")
                     self.ui.stop_listening_animation()
 
-        def run(self):
+        def run(self) -> None:
             self.listener = keyboard.Listener(on_press=self.on_press)
             self.listener.start()
 
@@ -143,7 +144,7 @@ if __name__ == "__main__":
             except KeyboardInterrupt:
                 self.cleanup()
 
-        def cleanup(self):
+        def cleanup(self) -> None:
             if self.listener:
                 self.listener.stop()
             if self.recording:

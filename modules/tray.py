@@ -1,11 +1,11 @@
+import os
+import threading
+
+import pyperclip
 import pystray
 from PIL import Image
-import threading
-import os
-import pyperclip
 
 def create_image():
-    # Get the directory where this script is located
     current_dir = os.path.dirname(os.path.abspath(__file__))
     icon_path = os.path.join(current_dir, 'microphone.png')
     return Image.open(icon_path)
@@ -47,14 +47,14 @@ def setup_tray_icon(app):
                 'Settings',
                 pystray.Menu(
                     pystray.MenuItem(
-                        'Clean Transcription',
-                        lambda icon, item: app.toggle_clean_transcription(),
-                        checked=lambda item: app.settings.get('clean_transcription')
-                    ),
-                    pystray.MenuItem(
                         'Continuous Capture',
                         lambda icon, item: None,
                         checked=lambda item: app.settings.get('continuous_capture')
+                    ),
+                    pystray.MenuItem(
+                        'Clean Transcription',
+                        lambda icon, item: app.toggle_clean_transcription(),
+                        checked=lambda item: app.settings.get('clean_transcription')
                     ),
                     pystray.MenuItem(
                         'Smart Capture',
