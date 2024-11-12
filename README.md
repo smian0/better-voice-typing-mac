@@ -44,15 +44,20 @@ The app works as follows:
 
 ## Setup/Installation
 
-1. Clone the repository
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Elevate-Code/better-voice-typing
+   cd better-voice-typing
+   ```
 2. Create a virtual environment using `python -m venv venv`
-3. Run `pip install -r requirements.txt` to install all dependencies
-4. Create a `.env` file based on `.env.example` by running `cp .env.example .env`
-5. Set up your API keys:
+3. Run `venv\Scripts\activate` to activate the virtual environment
+4. Run `pip install -r requirements.txt` to install all dependencies
+5. Create a `.env` file based on `.env.example` by running `cp .env.example .env`
+6. Set up your API keys:
    - Get an OpenAI API key from [OpenAI's API Keys page](https://platform.openai.com/api-keys)
    - (Optional) Get an Anthropic API key if you want to use the text cleaning feature
    - Add these keys to your `.env` file
-6. Run the app by double-clicking `voice_typing.pyw`, or add it to your Windows startup folder to launch automatically on system boot
+7. Run the app by double-clicking `voice_typing.pyw`, and add a shortcut to your startup folder to launch automatically on system boot
 
 ## TODO
 - [ ] Customizable activation shortcuts for recording control
