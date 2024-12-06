@@ -3,35 +3,33 @@ import os
 from typing import Any, Dict
 
 class Settings:
-    def __init__(self) -> None:
-        self.settings_file: str = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'settings.json')
-        self.default_settings: Dict[str, bool] = {
-            'continuous_capture': True,
-            'smart_capture': False,
-            'clean_transcription': True
+    def __init__(self, filename: str = "settings.json") -> None:
+        self.filename = os.path.join(os.path.dirname(__file__), filename)
+        self.settings: Dict[str, Any] = self._load_settings()
+
+    def _load_settings(self) -> Dict[str, Any]:
+        """Load settings from file or create default if not exists"""
+        if os.path.exists(self.filename):
+            try:
+                with open(self.filename, 'r') as f:
+                    return json.load(f)
+            except json.JSONDecodeError:
+                pass
+        # Default settings
+        return {
+            "clean_transcription": True
         }
-        self.current_settings: Dict[str, Any] = self.load_settings()
 
-    def load_settings(self) -> Dict[str, Any]:
-        try:
-            if os.path.exists(self.settings_file):
-                with open(self.settings_file, 'r') as f:
-                    return {**self.default_settings, **json.load(f)}
-            return self.default_settings.copy()
-        except Exception as e:
-            print(f"Error loading settings: {str(e)}")
-            return self.default_settings.copy()
+    def _save_settings(self) -> None:
+        """Save settings to file"""
+        with open(self.filename, 'w') as f:
+            json.dump(self.settings, f, indent=4)
 
-    def save_settings(self) -> None:
-        try:
-            with open(self.settings_file, 'w') as f:
-                json.dump(self.current_settings, f, indent=4)
-        except Exception as e:
-            print(f"Error saving settings: {str(e)}")
-
-    def get(self, key: str) -> Any:
-        return self.current_settings.get(key, self.default_settings.get(key))
+    def get(self, key: str, default: Any = None) -> Any:
+        """Get a setting value"""
+        return self.settings.get(key, default)
 
     def set(self, key: str, value: Any) -> None:
-        self.current_settings[key] = value
-        self.save_settings()
+        """Set a setting value and save to file"""
+        self.settings[key] = value
+        self._save_settings()

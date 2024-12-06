@@ -5,68 +5,69 @@ import traceback
 from typing import Any, Callable, Optional
 
 from pynput import keyboard
+import rumps
 
 from modules.clean_text import clean_transcription
 from modules.history import TranscriptionHistory
 from modules.recorder import AudioRecorder
 from modules.settings import Settings
-from modules.transcribe import transcribe_audio
-from modules.tray import setup_tray_icon
+from modules.transcribe import transcribe_audio, reset_session_stats
 from modules.ui import UIFeedback
 
-class VoiceTypingApp:
+class VoiceTypingApp(rumps.App):
     def __init__(self) -> None:
-        # Hide console in Windows if running as .pyw
-        if os.name == 'nt':
-            import ctypes
-            ctypes.windll.user32.ShowWindow(
-                ctypes.windll.kernel32.GetConsoleWindow(), 0)
+        super().__init__("Voice Typing", title="🎤")
 
         self.settings = Settings()
-        self.ui_feedback = UIFeedback()
+        self.ui_feedback = UIFeedback(self)
         self.recorder = AudioRecorder(level_callback=self.ui_feedback.update_audio_level)
         self.ui_feedback.set_click_callback(self.cancel_recording)
         self.recording = False
-        self.ctrl_pressed = False
+        self.option_pressed = False
         self.clean_transcription_enabled = self.settings.get('clean_transcription')
         self.history = TranscriptionHistory()
 
-        def win32_event_filter(msg: int, data: Any) -> bool:
-            # Key codes and messages
-            VK_CONTROL = 0x11
-            VK_LCONTROL = 0xA2
-            VK_RCONTROL = 0xA3
-            VK_CAPITAL = 0x14
-
-            WM_KEYDOWN = 0x0100
-            WM_KEYUP = 0x0101
-
-            if data.vkCode in (VK_CONTROL, VK_LCONTROL, VK_RCONTROL):
-                if msg == WM_KEYDOWN:
-                    self.ctrl_pressed = True
-                elif msg == WM_KEYUP:
-                    self.ctrl_pressed = False
-                return True
-
-            # Handle Caps Lock
-            if data.vkCode == VK_CAPITAL and msg == WM_KEYDOWN:
-                if self.ctrl_pressed:
-                    # Allow normal Caps Lock behavior when Ctrl is pressed
-                    return True
-                else:
-                    # Toggle recording and suppress default Caps Lock behavior
-                    self.toggle_recording()
-                    self.listener.suppress_event()
-                    return False
-
-            return True
-
+        # Reset transcription session stats
+        reset_session_stats()
+        
+        # Setup keyboard listener for macOS
         self.listener = keyboard.Listener(
-            win32_event_filter=win32_event_filter,
-            suppress=False
+            on_press=self._on_press,
+            on_release=self._on_release
         )
+        
+        # Setup menu
+        self.menu = [
+            rumps.MenuItem("Clean Transcription", 
+                         callback=self.toggle_clean_transcription,
+                         key='c'),
+            None,  # Separator
+            rumps.MenuItem("Reset Session Stats",
+                         callback=self.reset_stats,
+                         key='r'),
+            None,  # Separator
+            rumps.MenuItem("Quit", callback=self.quit_app, key='q')
+        ]
 
-    def toggle_recording(self) -> None:
+    def _on_press(self, key: keyboard.Key) -> None:
+        try:
+            # Handle Option key (Alt key on Mac)
+            if key == keyboard.Key.alt:
+                self.option_pressed = True
+            # Handle Space when Option is pressed
+            elif key == keyboard.Key.space and self.option_pressed:
+                self.toggle_recording()
+        except AttributeError:
+            pass
+
+    def _on_release(self, key: keyboard.Key) -> None:
+        try:
+            if key == keyboard.Key.alt:
+                self.option_pressed = False
+        except AttributeError:
+            pass
+
+    def toggle_recording(self, sender=None) -> None:
         if not self.recording:
             print("🎙️ Starting recording...")
             self.recording = True
@@ -89,36 +90,44 @@ class VoiceTypingApp:
     def _process_audio_thread(self) -> None:
         try:
             print("✍️ Starting transcription...")
-            text = transcribe_audio(self.recorder.filename)
+            result = transcribe_audio(self.recorder.filename)
+            text = result.text
             if self.clean_transcription_enabled:
                 text = clean_transcription(text)
             self.history.add(text)
             self.ui_feedback.insert_text(text)
-            self.update_icon_menu()
-            print("Transcription completed and inserted")
+            
+            # Update menu bar stats using session totals
+            self.ui_feedback.update_stats(
+                result.tokens_sent,
+                result.tokens_received,
+                result.session_cost
+            )
+            
+            print("\nTranscribed text:")
+            print(f"{text}")
+            print("\nText ready to paste")
         except Exception as e:
             print("Error in _process_audio_thread:")
             traceback.print_exc()
             self.ui_feedback.insert_text(f"Error: {str(e)[:50]}...")
 
-    def toggle_clean_transcription(self) -> None:
+    @rumps.clicked("Clean Transcription")
+    def toggle_clean_transcription(self, sender) -> None:
         self.clean_transcription_enabled = not self.clean_transcription_enabled
+        sender.state = self.clean_transcription_enabled
         self.settings.set('clean_transcription', self.clean_transcription_enabled)
         print(f"Clean transcription {'enabled' if self.clean_transcription_enabled else 'disabled'}")
+
+    def quit_app(self, sender) -> None:
+        self.cleanup()
+        rumps.quit_application()
 
     def run(self) -> None:
         # Start keyboard listener
         self.listener.start()
-
-        # Setup tray icon with self reference
-        setup_tray_icon(self)
-
-        # Start the UI feedback's tkinter mainloop in the main thread
-        try:
-            self.ui_feedback.root.mainloop()
-        finally:
-            self.cleanup()
-            sys.exit(0)
+        # Start the rumps app
+        super().run()
 
     def cleanup(self) -> None:
         self.listener.stop()
@@ -142,6 +151,12 @@ class VoiceTypingApp:
         except Exception as e:
             print(f"Error stopping recorder: {e}")
             traceback.print_exc()
+
+    def reset_stats(self, sender) -> None:
+        """Reset session statistics"""
+        reset_session_stats()
+        self.ui_feedback.update_stats(0, 0, 0.0)
+        print("Session statistics reset")
 
 if __name__ == "__main__":
     app = VoiceTypingApp()

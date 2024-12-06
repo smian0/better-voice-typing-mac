@@ -1,75 +1,27 @@
-import os
-import threading
+import rumps  # New import for macOS menu bar
+from typing import Any
 
-import pyperclip
-import pystray
-from PIL import Image
-
-def create_image():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    icon_path = os.path.join(current_dir, 'microphone.png')
-    return Image.open(icon_path)
-
-def on_exit(icon, item):
-    icon.stop()
-    # Ensure clean exit of the application
-    os._exit(0)
-
-def create_copy_menu(app):
-    """Creates dynamic menu of recent transcriptions"""
-    def make_copy_handler(text):
-        return lambda icon, item: pyperclip.copy(text)
-
-    return [
-        pystray.MenuItem(
-            app.history.get_preview(text),
-            make_copy_handler(text)
+class VoiceTypingMenuBar(rumps.App):
+    def __init__(self, app: Any) -> None:
+        super().__init__("Voice Typing", icon="🎤")
+        self.app = app
+        
+        # Add menu items
+        self.clean_transcription = rumps.MenuItem(
+            "Clean Transcription",
+            callback=self.toggle_clean_transcription
         )
-        for text in app.history.get_recent()
-    ]
+        self.menu = [self.clean_transcription]
+        
+        # Update initial state
+        self.clean_transcription.state = app.clean_transcription_enabled
 
-def setup_tray_icon(app):
-    icon = pystray.Icon('Voice Typing')
-    icon.icon = create_image()
+    @rumps.clicked("Clean Transcription")
+    def toggle_clean_transcription(self, sender) -> None:
+        self.app.toggle_clean_transcription()
+        sender.state = self.app.clean_transcription_enabled
 
-    def get_menu():
-        # Dynamic menu that updates when called
-        copy_menu = create_copy_menu(app)
-        return pystray.Menu(
-            pystray.MenuItem(
-                'Recent Transcriptions',
-                pystray.Menu(*copy_menu) if copy_menu else pystray.Menu(
-                    pystray.MenuItem('No transcriptions yet', None, enabled=False)
-                ),
-                enabled=bool(copy_menu)
-            ),
-            pystray.MenuItem(
-                'Settings',
-                pystray.Menu(
-                    pystray.MenuItem(
-                        'Continuous Capture',
-                        lambda icon, item: None,
-                        checked=lambda item: app.settings.get('continuous_capture')
-                    ),
-                    pystray.MenuItem(
-                        'Clean Transcription',
-                        lambda icon, item: app.toggle_clean_transcription(),
-                        checked=lambda item: app.settings.get('clean_transcription')
-                    ),
-                    pystray.MenuItem(
-                        'Smart Capture',
-                        lambda icon, item: None,
-                        enabled=False
-                    )
-                )
-            ),
-            pystray.MenuItem('Exit', on_exit)
-        )
-
-    # Initial menu setup
-    icon.menu = get_menu()
-    # Store the update function in the app to call it from elsewhere
-    app.update_icon_menu = lambda: setattr(icon, 'menu', get_menu()) # Updates the tray icon's menu
-
-    # Start the icon's event loop in its own thread
-    threading.Thread(target=icon.run).start()
+def setup_tray_icon(app: Any) -> None:
+    """Setup menu bar icon for macOS"""
+    menu_bar = VoiceTypingMenuBar(app)
+    menu_bar.run()

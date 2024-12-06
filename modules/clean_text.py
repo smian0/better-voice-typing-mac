@@ -1,21 +1,13 @@
-from .completion import get_anthropic_completion
-
 def clean_transcription(text: str) -> str:
     """
-    Cleans and corrects voice-to-text transcription using Anthropic's Claude model.
+    Basic text cleaning for transcription.
     """
-    prompt = """
-Your task is to correct the following voice-to-text transcript, if necessary, while preserving the original meaning:
-<text>
-{}
-</text>
-Respond only with the corrected text, nothing else.
-    """.strip().format(text)
-
-    cleaned_text = get_anthropic_completion(
-        messages=[{"role": "user", "content": prompt}],
-        model="claude-3-haiku-20240307",
-        temperature=0.3
-    )
-
-    return cleaned_text
+    # Simple cleaning rules
+    text = text.strip()
+    # Ensure first character is capitalized
+    if text and text[0].isalpha():
+        text = text[0].upper() + text[1:]
+    # Ensure there's a period at the end if the text ends with a letter or number
+    if text and text[-1].isalnum():
+        text += "."
+    return text
